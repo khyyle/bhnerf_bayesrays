@@ -5,4 +5,4 @@ bhnerf/__pycache__
 bhnerf.egg-info/
 build/
 .ipynb_checkpoints/
-
+runs/

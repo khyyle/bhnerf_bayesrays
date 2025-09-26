@@ -854,7 +854,8 @@ def render_volumes_plotly(volumes_norm, fov, percentiles: list[tuple[float, floa
                           colorscale="Plasma",
                           surface_count=10,
                           opacityscale=[[0.00, 0.00],[0.05, 0.05],[0.20, 0.15],[0.40, 0.30],[0.60, 0.50],[0.80, 0.80],[1.00, 1.00]],
-                          global_opacity=None, interactive_sync=False):
+                          global_opacity=None, interactive_sync=False, fov_M=None, 
+                          fig_width=None, fig_height=None, colorbar=False):
     """
     Args
     ----
@@ -889,19 +890,20 @@ def render_volumes_plotly(volumes_norm, fov, percentiles: list[tuple[float, floa
     Xg, Yg, Zg = np.meshgrid(xs, ys, zs, indexing="ij")
 
     n = len(volumes_norm)
-    if titles is None: titles = [f"Vol {i+1}" for i in range(n)]
-    assert len(titles) == n
+    if titles: assert len(titles) == n
 
     ctor = go.FigureWidget if interactive_sync else go.Figure
     fig = ctor(plotly.subplots.make_subplots(
         rows=1, cols=n,
         specs=[[{'type': 'scene'} for _ in range(n)]],
-        subplot_titles=titles
+        #subplot_titles=titles
     ))
 
-    cam = dict(up=dict(x=0, y=0, z=1),
-               center=dict(x=0, y=0, z=0),
-               eye=dict(x=1.35, y=1.35, z=1.35))
+    cam = dict(up=dict(x=0.0, y=0, z=1),
+                eye=dict(x=0.0, y=2.3,z=0.9))
+    #dict(up=dict(x=0, y=0, z=1),
+           #    center=dict(x=0, y=0, z=0),
+            #   eye=dict(x=1.35, y=1.35, z=1.35))
 
     for i, vol in enumerate(volumes_norm):
         vals = np.asarray(vol, dtype=float).ravel(order='C')
@@ -916,7 +918,9 @@ def render_volumes_plotly(volumes_norm, fov, percentiles: list[tuple[float, floa
             surface_count=surface_count,
             isomin=float(lo),
             isomax=float(hi),
-            caps=dict(x_show=False, y_show=False, z_show=False)
+            caps=dict(x_show=False, y_show=False, z_show=False),
+            showscale=colorbar
+
         )
         if global_opacity is not None:
             vol_kwargs["opacity"] = float(global_opacity)
@@ -938,9 +942,40 @@ def render_volumes_plotly(volumes_norm, fov, percentiles: list[tuple[float, floa
         domain_x0, domain_x1 = fig.layout[scene_key].domain.x
         cb_x = domain_x1 + 0.02
         tr = fig.data[i]
-        tr.colorbar = dict(x=cb_x, len=0.85, tickformat=".3g", outlinewidth=0)
-
-    fig.update_layout(margin=dict(l=0, r=0, t=40, b=0))
+        if colorbar == True:
+            tr.colorbar = dict(x=cb_x, len=0.85, tickformat=".3g", ticks="", tickmode="array",
+                  tickvals=[], ticktext=[], outlinewidth=0, title="")
+    
+    if titles:
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=40, b=0),
+            #margin=dict(l=10, r=10, t=50, b=10),
+            #autosize=False, width=900, height=650,
+        )
+    else:
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=0, b=0)
+        )
+    for tr in fig.data:
+        if hasattr(tr, "colorbar") and tr.colorbar:
+            tr.update(colorbar=dict(x=0.98, len=0.8, xanchor="left"))
+    
+    if fov_M is not None:
+        fig.update_layout(
+            scene=dict(
+                aspectmode="data",
+                xaxis=dict(range=[-fov_M/2, fov_M/2]),
+                yaxis=dict(range=[-fov_M/2, fov_M/2]),
+                zaxis=dict(range=[-fov_M/2, fov_M/2]),
+                domain=dict(x=[0.10, 0.90], y=[0.05, 0.95])
+            )
+        )
+    elif fig_width or fig_height:
+        fig.update_layout(
+            autosize=False,
+            width=fig_width,
+            height=fig_height
+        )
 
     if interactive_sync:
         # FIXME: doesnt error, but kills kernel when i try to display with IPython.display's display() and gives backend error
@@ -1076,8 +1111,8 @@ def render_3d_quiver(sigma_x, sigma_y, sigma_z,
                      sizemode='absolute',
                      sizeref=None,
                      showscale=True,
-                     title="3D Uncertainty Quiver (cones)",
-                     color_quantile=None,
+                     title=None,
+                     color_quantile=None, fig_width=None, fig_height=None,
                      colorbar_pos=(1.08, 0.5, 0.9)):  
     
     """
@@ -1206,7 +1241,8 @@ def render_3d_quiver(sigma_x, sigma_y, sigma_z,
         cmin=float(cmin),
         cmax=float(cmax),
         cauto=False,
-        colorbar=dict(x=1.08,y=0.5,len=0.9,xpad=10)
+        colorbar=dict(x=1.08,y=0.5,len=0.9,xpad=10, ticks="", tickmode="array",
+                  tickvals=[], ticktext=[], outlinewidth=0, title="")
     )
 
     fig = go.Figure(data=[cone])
@@ -1220,6 +1256,36 @@ def render_3d_quiver(sigma_x, sigma_y, sigma_z,
         ),
         margin=dict(l=0, r=0, t=40, b=0)
     )
+
+    if title:
+        fig.update_layout(
+            title=title,
+            scene=dict(
+                xaxis_title='x',
+                yaxis_title='y',
+                zaxis_title='z',
+                aspectmode='data',
+            ),
+            margin=dict(l=0, r=0, t=40, b=0)
+        )
+    else:
+        fig.update_layout(
+            scene=dict(
+                xaxis_title='x',
+                yaxis_title='y',
+                zaxis_title='z',
+                aspectmode='data',
+            ),
+            margin=dict(l=0, r=0, t=0, b=0))
+
+
+
+    if fig_width or fig_height:
+        fig.update_layout(
+            autosize=False,
+            width=fig_width,
+            height=fig_height
+        )
     return fig
 
 def overlay_obs_and_warp_from_geos(
@@ -1231,8 +1297,8 @@ def overlay_obs_and_warp_from_geos(
     warp_axis=np.array([0.0,0.0,1.0]),
     obs_color="#DC143C",
     warp_color="#4169E1",
-    obs_label="obs",
-    warp_label=None,
+    obs_label="obs dir",
+    warp_label='warp dir', legend=False
 ):
     def _to_mesh(a, b, c):
         A, B, C = np.asarray(a), np.asarray(b), np.asarray(c)
@@ -1260,6 +1326,7 @@ def overlay_obs_and_warp_from_geos(
             x=[p1[0]], y=[p1[1]], z=[p1[2]],
             u=[vhat[0]], v=[vhat[1]], w=[vhat[2]],
             anchor='tail', sizemode='absolute',
+            sizeref=0.06 * Lmax,
             showscale=False,
             colorscale=[[0, color], [1, color]],
             name=name + " head", 
@@ -1274,7 +1341,7 @@ def overlay_obs_and_warp_from_geos(
 
     obs_len = 0.7 * Lmax
     p0_obs = center - 0.35 * Lmax * obs_dir
-    _add_arrow(p0_obs, obs_dir, obs_len, obs_color, name=obs_label or "Observation direction", legend=True,legendgroup="obs")
+    _add_arrow(p0_obs, obs_dir, obs_len, obs_color, name=obs_label or "Observation direction", legend=legend,legendgroup="obs")
 
     a = np.asarray(warp_axis, dtype=float)
     a /= (np.linalg.norm(a) + 1e-12)
@@ -1294,18 +1361,21 @@ def overlay_obs_and_warp_from_geos(
     fig.add_trace(go.Scatter3d(
         x=arc[0], y=arc[1], z=arc[2],
         mode='lines', line=dict(width=6, color=warp_color),
-        name=warp_label or "Rotation direction", showlegend=True, legendgroup='warp'
+        name=warp_label or "Rotation direction", showlegend=legend, legendgroup='warp'
     ))
     tan = -np.sin(thetas[-1])*e1 + np.cos(thetas[-1])*e2
     if spin < 0: tan *= -1.0
     _add_arrow(arc[:, -1], tan/np.linalg.norm(tan), 0.3*R, warp_color,
                name=warp_label or "Rotation direction", legend=False, legendgroup="warp")
 
+    if legend:
+        fig.update_layout(
+            legend=dict(
+                x=0.02, y=0.02, xanchor='left', yanchor='bottom',
+                bgcolor='rgba(255,255,255,0.65)', bordercolor='rgba(0,0,0,0.25)', borderwidth=1
+            )
+        )
     fig.update_layout(
-        legend=dict(
-            x=0.02, y=0.02, xanchor='left', yanchor='bottom',
-            bgcolor='rgba(255,255,255,0.65)', bordercolor='rgba(0,0,0,0.25)', borderwidth=1
-        ),
         scene=dict(aspectmode='data')
     )
     return fig
@@ -1406,7 +1476,7 @@ def overlay_obs_and_warp_outside(fig, geos, x, y, z, spin=+0.2,
         showscale=False, colorscale=[[0,warp_color],[1,warp_color]],
         name=(warp_label or ("warp +" if spin>=0 else "warp -")), showlegend=False
     ))
-
+        
     fig.update_layout(
         legend=dict(
             x=0.02, y=0.02, xanchor='left', yanchor='bottom',
@@ -1762,3 +1832,23 @@ def geodesic_tube_mask(x, y, z, geos, select="center", pixel=None,
 
     mask = (min_d2 <= float(radius)**2).reshape(X.shape)
     return (mask, P, sel)
+
+def render_geodesic_that_was_masked_along(fig, coords, sel, P):
+    import plotly.graph_objects as go
+    def aabb_from_coords(x, y, z, pad=0.0):
+        import numpy as np
+        def mm(A): return float(np.nanmin(A)), float(np.nanmax(A))
+        xmin, xmax = mm(x); ymin, ymax = mm(y); zmin, zmax = mm(z)
+        return (xmin-pad, xmax+pad, ymin-pad, ymax+pad, zmin-pad, zmax+pad)
+
+    xmin,xmax,ymin,ymax,zmin,zmax = aabb_from_coords(coords[0], coords[1], coords[2])
+    inside = (P[:,0]>=xmin)&(P[:,0]<=xmax)&(P[:,1]>=ymin)&(P[:,1]<=ymax)&(P[:,2]>=zmin)&(P[:,2]<=zmax)
+    P = P[inside]
+    fig.add_trace(go.Scatter3d(
+        x=P[:,0], y=P[:,1], z=P[:,2],
+        mode="lines",
+        line=dict(width=5, color="#92d600"),
+        name=f"Selected geodesic", #({sel[0]}={sel[1:]})",
+        showlegend=True
+    ))
+    return fig
